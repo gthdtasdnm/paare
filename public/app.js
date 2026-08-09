@@ -10,9 +10,24 @@ const HILFE = [
   "<b>Wer die meisten Paare hat, gewinnt.</b> Allein geht es auch: dann ist es ein Gedächtnistraining.",
 ];
 
+// Bedenkzeit: ohne sichtbare Uhr wirkt der Zugwechsel nach Ablauf wie ein
+// Fehler. Mit Uhr ist er das, was er ist – eine Frist. Allein gespielt gibt es
+// keine Frist, dann bleibt die Uhr leer.
+let uhrZiel = 0;
+
+function uhr() {
+  const u = $("uhr");
+  if (!u) return;
+  const rest = Math.max(0, Math.ceil((uhrZiel - Date.now()) / 1000));
+  u.textContent = uhrZiel && rest <= 20 ? rest + "s" : "";
+}
+setInterval(uhr, 500);
+
 function zeichneSpiel(m) {
   zeige("game");
-  $("tbLinks").innerHTML = `Übrig <strong>${m.uebrig}</strong>`;
+  $("tbLinks").innerHTML = `Übrig <strong>${m.uebrig}</strong> <span id="uhr"></span>`;
+  uhrZiel = m.frist || 0;
+  uhr();
   $("tbTag").textContent = m.amZug === S.me ? "Du bist dran" : m.amZugName;
 
   const b = $("buehne");

@@ -20,6 +20,12 @@ const MAX_PLAYERS = 6;
 const MIN_PLAYERS = 1;
 const ZU_MS = 1800;   // so lange bleibt ein falsches Paar offen liegen
 
+// Bedenkzeit je Zug. Wer dran ist und nichts tut, haelt sonst die ganze Runde
+// an - und am Tisch merkt niemand, woran es liegt. Nach Ablauf wird eine
+// einzeln offene Karte wieder zugedeckt und der Zug rueckt weiter.
+// Ueber die Umgebung verstellbar, damit die Probe nicht eine Minute wartet.
+const ZUG_MS = Number(Deno.env.get("ZUG_MS") ?? 60_000);
+
 const ZEICHEN = [
   "🦊", "🐢", "🦉", "🐙", "🦩", "🐝", "🦔", "🐳", "🦕", "🐧",
   "🍄", "🌵", "🍋", "🍒", "🌻", "🥑", "🍩", "🌶️", "🥨", "🍇",
@@ -38,6 +44,7 @@ const {
   einstellungen: { paare: 15 },
   raumfelder: () => ({
     karten: [], offen: [], reihe: [], amZug: null, sperre: false, meldung: null,
+    frist: 0, zugTimer: null,
   }),
   spielerfelder: () => ({ gefunden: 0 }),
 
@@ -84,6 +91,7 @@ function startGame(room) {
     p.ready = false;
   }
   room.amZug = room.reihe[0];
+  neueFrist(room);
   pushState(room);
   pushRunde(room);
   pushRoomList();
@@ -95,10 +103,39 @@ function naechster(room, von) {
   return room.reihe[(i < 0 ? 0 : i + 1) % room.reihe.length];
 }
 
+/**
+ * Die Bedenkzeit neu aufziehen. Sie haengt an einem eigenen Zeitgeber, nicht an
+ * `room.timers`: dort liegt der Zeitgeber, der ein falsches Paar wieder
+ * zudeckt, und der wird zwischendurch geloescht.
+ *
+ * Laeuft sie ab, wird eine einzeln offene Karte wieder zugedeckt und der Zug
+ * geht weiter. Wer zwei Karten offen hat, wartet ohnehin nur auf die Sperre.
+ */
+function neueFrist(room) {
+  if (room.zugTimer) clearTimeout(room.zugTimer);
+  room.zugTimer = null;
+  if (room.phase !== "playing" || room.reihe.length < 2) {
+    room.frist = 0;
+    return;
+  }
+  room.frist = Date.now() + ZUG_MS;
+  room.zugTimer = setTimeout(() => {
+    room.zugTimer = null;
+    if (room.phase !== "playing" || room.sperre) return;
+    for (const x of room.offen) room.karten[x].offen = false;
+    room.offen = [];
+    room.meldung = `${name(room, room.amZug)} war zu lange still.`;
+    room.amZug = naechster(room, room.amZug);
+    neueFrist(room);
+    pushRunde(room);
+  }, ZUG_MS);
+}
+
 function weiterWennWeg(room) {
   const p = room.players.get(room.amZug);
   if (p?.connected) return;
   room.amZug = naechster(room, room.amZug);
+  neueFrist(room);
   pushRunde(room);
 }
 
@@ -109,6 +146,7 @@ function pushRunde(room) {
     amZug: room.amZug,
     amZugName: name(room, room.amZug),
     sperre: room.sperre,
+    frist: room.frist,
     meldung: room.meldung,
     // Nur aufgedeckte oder abgeräumte Karten verraten ihr Zeichen.
     brett: room.karten.map((k, i) => ({
@@ -151,6 +189,7 @@ function aufdecken(room, player, i) {
     room.offen = [];
     room.sperre = false;
     room.meldung = `${player.name} hat ein Paar – noch mal!`;
+    neueFrist(room);
     pushRunde(room);
     pushState(room);
     if (room.karten.every((x) => x.weg)) finishGame(room);
@@ -166,6 +205,7 @@ function aufdecken(room, player, i) {
     room.sperre = false;
     room.meldung = null;
     room.amZug = naechster(room, player.id);
+    neueFrist(room);
     pushRunde(room);
   }, ZU_MS);
   room.timers.add(id);
@@ -173,6 +213,9 @@ function aufdecken(room, player, i) {
 
 function finishGame(room) {
   clearTimers(room);
+  if (room.zugTimer) clearTimeout(room.zugTimer);
+  room.zugTimer = null;
+  room.frist = 0;
   room.phase = "final";
   const tabelle = [...room.players.values()]
     .filter((p) => room.reihe.includes(p.id) || p.gefunden)
@@ -190,6 +233,9 @@ function finishGame(room) {
 
 function backToLobby(room) {
   clearTimers(room);
+  if (room.zugTimer) clearTimeout(room.zugTimer);
+  room.zugTimer = null;
+  room.frist = 0;
   room.phase = "lobby";
   room.rundeNr = 0;
   room.karten = [];

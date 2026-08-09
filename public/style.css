@@ -219,6 +219,12 @@ input:focus, select:focus {
 
 /* ══════════════ Gemeinsame Lobby-Basis ══════════════ Ende ═════════════════ */
 
+/* ══════════════ Gemeinsamer Rahmen ══════════════ Anfang ═════════════════ */
+/* ERZEUGT - NICHT HIER AENDERN. Quelle: /var/www/html/werkzeug/rahmen.css
+   Aendern, dann `node werkzeug/verteilen.mjs` - das schreibt den Abschnitt in
+   jedes Spiel, das ihn fuehrt. Alles unterhalb des Endmarkers bleibt stehen:
+   dort steht das Eigene des Spiels. */
+
 /* ── Rahmen: Grundgeruest fuer alle Bildschirme ───────────────────────── */
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -290,6 +296,7 @@ h1, h2, h3 { margin: 0; }
 }
 .help-inner li { margin-bottom: 8px; }
 .help-inner h2 { margin-bottom: 10px; }
+/* ══════════════ Gemeinsamer Rahmen ══════════════ Ende ═══════════════════ */
 
 /* ── Paare ────────────────────────────────────────────────────────────── */
 :root { --akzent: #52ffa8; --akzent2: #a06bff; }
