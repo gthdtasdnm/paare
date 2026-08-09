@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0a0612">
+<title>Paare</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧠</text></svg>">
+</head>
+<body>
+
+<div id="status"></div>
+<div id="toast"></div>
+
+<section id="screen-home" class="screen active">
+  <div class="home">
+    <h1 class="logo">PAA<span>RE</span></h1>
+    <p class="tag">Zwei aufdecken. Merken. Wieder zu.</p>
+
+    <label class="field-label" for="name">Dein Name</label>
+    <input id="name" maxlength="12" placeholder="z.&nbsp;B. Mo" autocomplete="nickname">
+
+    <div id="homeExtra"></div>
+
+    <div class="setting">
+      <span class="setting-label">Sichtbar</span>
+      <div class="segmented">
+        <button class="seg sel" data-vis="public">Öffentlich</button>
+        <button class="seg" data-vis="private">Privat</button>
+      </div>
+    </div>
+    <button id="createBtn" class="btn primary big">Raum eröffnen</button>
+
+    <div class="or"><span>oder beitreten</span></div>
+
+    <div class="rooms-head">Offene Räume <span id="roomsCount"></span></div>
+    <div id="roomList" class="roomlist"></div>
+
+    <div class="joinrow">
+      <input id="codeInput" maxlength="5" placeholder="CODE" autocapitalize="characters"
+             autocomplete="off" spellcheck="false">
+      <button id="joinBtn" class="btn">Mit Code</button>
+    </div>
+
+    <button id="helpBtn" class="btn ghost small">Wie geht das?</button>
+  </div>
+</section>
+
+<section id="screen-lobby" class="screen">
+  <div class="lobby">
+    <div class="codebox">
+      <span class="codebox-label">Raumcode</span>
+      <strong id="roomCode">····</strong>
+      <span id="roomVis" class="codebox-vis"></span>
+      <button id="copyBtn" class="btn ghost small">Link kopieren</button>
+    </div>
+    <div class="lobby-head"><h2>Spieler <span id="lobbyCount">1/6</span></h2></div>
+    <div id="playerList" class="seats"></div>
+
+    <div id="hostControls" hidden>
+      <div id="hostExtra"></div>
+      <div class="setting">
+        <span class="setting-label">Sichtbar</span>
+        <div class="segmented">
+          <button class="seg" data-lobbyvis="public">Öffentlich</button>
+          <button class="seg" data-lobbyvis="private">Privat</button>
+        </div>
+      </div>
+      <button id="startBtn" class="btn primary big">Runde starten</button>
+      <p id="startHint" class="hintline"></p>
+    </div>
+    <div id="guestControls" hidden>
+      <button id="readyBtn" class="btn big">Bereit!</button>
+      <p class="hintline">Der Host startet, sobald alle bereit sind.</p>
+    </div>
+    <button id="leaveBtn" class="btn ghost small">Raum verlassen</button>
+  </div>
+</section>
+
+<section id="screen-game" class="screen">
+  <div class="game">
+    <header class="topbar">
+      <div class="tb-runde" id="tbLinks"></div>
+      <div class="tb-modus" id="tbTag"></div>
+      <button id="endeBtn" class="btn ghost sm" hidden>Beenden</button>
+    </header>
+    <main class="buehne" id="buehne"></main>
+    <footer class="fussbereich">
+      <div id="aktionen" class="aktionen"></div>
+      <p id="rundenHint" class="hintline"></p>
+    </footer>
+  </div>
+</section>
+
+<section id="screen-final" class="screen">
+  <div class="final">
+    <h2 class="final-title">Endstand</h2>
+    <p id="finalSub" class="hintline"></p>
+    <ol id="podium" class="podium"></ol>
+    <button id="againBtn" class="btn big">Nochmal!</button>
+    <p id="againHint" class="hintline">Der Host holt alle zurück in den Warteraum.</p>
+  </div>
+</section>
+
+<div id="help" hidden>
+  <div class="help-inner">
+    <h2>So läuft das</h2>
+    <ul id="helpList"></ul>
+    <button id="helpClose" class="btn">Alles klar</button>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
