@@ -141,7 +141,10 @@ function aufdecken(room, player, i) {
   const [a, b] = room.offen.map((x) => room.karten[x]);
   room.sperre = true;
   if (a.paar === b.paar) {
+    // Abgeräumt heißt nicht mehr offen: sonst bleibt an der Karte für den Rest
+    // der Partie beides stehen, und im Client liegen zwei Klassen übereinander.
     a.weg = b.weg = true;
+    a.offen = b.offen = false;
     a.von = b.von = player.name;
     player.gefunden++;
     player.punkte = player.gefunden;
