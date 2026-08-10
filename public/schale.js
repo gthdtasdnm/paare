@@ -83,21 +83,57 @@ export function starteSchale({
     }
   }
 
+  // Wartezeit bis zum naechsten Versuch. Sie waechst mit jedem Fehlschlag und
+  // faellt beim ersten Erfolg zurueck - genau so, wie es die neun eigenen
+  // Clients (nochnie, maexchen, imposter, flasche, luckyreflex, amehesten,
+  // cubes, wortleger, luegen) schon immer gemacht haben.
+  //
+  // Vorher stand hier ein fester Takt von 1500 ms. Das sind **genau 40 neue
+  // Verbindungen je Minute** - und `bremse.js` laesst 40 je Minute und IP zu.
+  // Ein einzelner Tab lag damit exakt auf der Grenze, zwei Tabs oder zwei
+  // Leute an einem Anschluss darueber: wem der Dienst kurz wegbrach, der
+  // sperrte sich selbst aus und kam auch dann nicht zurueck, als der Dienst
+  // laengst wieder lief. Beim Ausrollen eines Updates traefe es alle
+  // gleichzeitig, und alle im selben Takt.
+  //
+  // Der Zufallsanteil ist kein Beiwerk: ohne ihn kommen nach einem Neustart
+  // alle Clients in derselben Millisekunde wieder - und werden gemeinsam
+  // abgewiesen, immer wieder.
+  const WARTE_ANFANG = 500;
+  const WARTE_MAX = 8000;
+  // Zurueckgesetzt wird erst, wenn die Verbindung sich bewaehrt hat. Ein
+  // `onopen` allein reicht nicht: ein Dienst in der Absturzschleife nimmt die
+  // Verbindung an und wirft sie sofort wieder ab. Wer dann bei jedem `open`
+  // auf 500 ms zuruecksetzt, haemmert schneller als mit dem festen Takt, den
+  // dieser Rueckzug ersetzen soll - nachgemessen mit `pruefe-durchlauf.mjs`
+  // B08, Betriebsart "flapp": 32 Versuche in 20 Sekunden.
+  const BEWAEHRT_NACH = 3000;
+  let warte = WARTE_ANFANG;
+  let bewaehrung = null;
+
   function verbinde(dann) {
     if (S.ws && S.ws.readyState === WebSocket.OPEN) return dann?.();
     S.ws = new WebSocket(wsUrl());
-    S.ws.onopen = () => { $("status").textContent = ""; dann?.(); };
+    S.ws.onopen = () => {
+      clearTimeout(bewaehrung);
+      bewaehrung = setTimeout(() => { warte = WARTE_ANFANG; }, BEWAEHRT_NACH);
+      $("status").textContent = "";
+      dann?.();
+    };
     S.ws.onmessage = (ev) => {
       let m;
       try { m = JSON.parse(ev.data); } catch { return; }
       empfange(m);
     };
     S.ws.onclose = () => {
+      clearTimeout(bewaehrung);
       $("status").textContent = "Verbindung weg – neu verbinden …";
+      const gleich = warte * (0.8 + Math.random() * 0.4);
+      warte = Math.min(warte * 1.8, WARTE_MAX);
       setTimeout(() => verbinde(() => {
         if (S.code) schicke({ t: "join", code: S.code, token: S.token, name: nameFeld() });
         else schicke({ t: "browse" });
-      }), 1500);
+      }), gleich);
     };
   }
 
@@ -213,8 +249,11 @@ export function starteSchale({
 
   const gespeichert = JSON.parse(sessionStorage.getItem(key) ?? "null");
   const hash = location.hash.replace("#", "").toUpperCase();
-  $("name").value = localStorage.getItem("spielername") ?? "";
-  $("name").onchange = () => localStorage.setItem("spielername", nameFeld());
+  // Der Schluessel heisst in allen dreiundzwanzig Spielen gleich - nur so
+  // findet man seinen Namen beim naechsten Spiel wieder vor, ohne ihn neu zu
+  // tippen. Wer ihn hier aendert, trennt die Schale von den uebrigen Spielen.
+  $("name").value = localStorage.getItem("spiele_name") ?? "";
+  $("name").onchange = () => localStorage.setItem("spiele_name", nameFeld());
   verbinde(() => {
     if (hash && gespeichert?.code === hash) {
       schicke({ t: "join", code: hash, token: gespeichert.token, name: nameFeld() });
