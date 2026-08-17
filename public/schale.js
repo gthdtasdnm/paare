@@ -67,12 +67,65 @@ export function starteSchale({
 }) {
   S.key = key;
 
+  // ---- Die eigene Kennung ------------------------------------------------
+  //
+  // Bis zum 17.08.2026 lag sie im `sessionStorage`. Der stirbt mit dem Tab -
+  // und auf dem Handy schliesst Safari Tabs auch von sich aus. Wer zurueckkam,
+  // war fuer den Server ein neuer Spieler: sein alter Platz stand noch da, hatte
+  // das Hostzeichen, und niemand konnte die Runde starten. Das war Bugreport 4.
+  //
+  // Jetzt liegt sie im `localStorage` und ueberlebt das Schliessen. Damit zwei
+  // Tabs desselben Geraets sich nicht gegenseitig vom Platz werfen, haengt ein
+  // Herzschlag daran: der Tab, dem die Kennung gehoert, frischt sie im
+  // Sekundentakt auf und schreibt seine eigene Tabkennung dazu.
+  //
+  //   - dieselbe Tabkennung  -> das sind wir selbst (Neuladen), Kennung nehmen
+  //   - fremd und Herzschlag frisch -> ein anderer Tab spielt gerade, Finger weg
+  //   - fremd und Herzschlag alt    -> niemand da, Kennung uebernehmen
+  //
+  // Ohne den mittleren Fall zoegen zwei Tabs einander abwechselnd den Platz weg.
+  const HERZ_MS = 4000;
+  const HERZ_TOT = 12_000;
+  const TAB = sessionStorage.getItem("spiele_tab") ??
+    (crypto.randomUUID?.() ?? String(Date.now()) + String(Math.random()).slice(2));
+  sessionStorage.setItem("spiele_tab", TAB);
+  let herzUhr = null;
+
+  function sitzLesen() {
+    try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
+  }
+
+  /** Kennung, die wir benutzen duerfen - oder `null`. */
+  function sitzFrei() {
+    const s = sitzLesen();
+    if (!s?.code || !s?.token) return null;
+    if (s.tab === TAB) return s;
+    return Date.now() - (s.herz ?? 0) > HERZ_TOT ? s : null;
+  }
+
+  const tokenFuer = (code) => (sitzFrei()?.code === code ? sitzFrei().token : undefined);
+
+  function sitzHalten() {
+    if (!S.code || !S.token) return;
+    localStorage.setItem(key, JSON.stringify({
+      code: S.code, token: S.token, tab: TAB, herz: Date.now(),
+    }));
+  }
+
+  function sitzLoeschen() {
+    clearInterval(herzUhr);
+    herzUhr = null;
+    localStorage.removeItem(key);
+  }
+
   function empfange(m) {
     switch (m.t) {
       case "rooms": zeichneRaeume(m.rooms); break;
       case "joined":
         S.me = m.you; S.token = m.token; S.code = m.code;
-        sessionStorage.setItem(key, JSON.stringify({ code: m.code, token: m.token }));
+        sitzHalten();
+        clearInterval(herzUhr);
+        herzUhr = setInterval(sitzHalten, HERZ_MS);
         history.replaceState(null, "", "#" + m.code);
         break;
       case "room": S.room = m; zeichneLobby(); zeichneRaum?.(m); break;
@@ -150,7 +203,11 @@ export function starteSchale({
       row.append(el("span", "roomrow-code", r.code));
       row.append(el("span", "roomrow-name", r.host));
       row.append(el("span", "roomrow-count", `${r.count}/${r.max}`));
-      row.onclick = () => verbinde(() => schicke({ t: "join", code: r.code, name: nameFeld() }));
+      // `token` ist meist leer. Steht dort einer, hat dieses Geraet in genau
+      // diesem Raum schon einen Platz - dann zurueck auf den alten, statt sich
+      // als zweite Person danebenzusetzen.
+      row.onclick = () => verbinde(() =>
+        schicke({ t: "join", code: r.code, token: tokenFuer(r.code), name: nameFeld() }));
       box.append(row);
     }
   }
@@ -221,7 +278,9 @@ export function starteSchale({
     );
   $("joinBtn").onclick = () => {
     const code = $("codeInput").value.toUpperCase().trim();
-    if (code) verbinde(() => schicke({ t: "join", code, name: nameFeld() }));
+    if (code) {
+      verbinde(() => schicke({ t: "join", code, token: tokenFuer(code), name: nameFeld() }));
+    }
   };
   $("copyBtn").onclick = async () => {
     const link = location.origin + location.pathname + "#" + S.code;
@@ -236,18 +295,24 @@ export function starteSchale({
   $("startBtn").onclick = () => schicke({ t: "start" });
   if ($("endeBtn")) $("endeBtn").onclick = () => schicke({ t: "ende" });
   $("againBtn").onclick = () => schicke({ t: "again" });
-  $("leaveBtn").onclick = () => {
+  // Hinaus geht es von ueberall, nicht nur aus der Lobby: `#leaveBtn` und jeder
+  // Knopf mit `data-raus`. Vorher fuehrte aus dem Spielbildschirm nur der
+  // Zurueck-Knopf des Browsers heraus, und aus dem Endstand gar nichts - wer
+  // nicht Host war, sass fest. Das war Bugreport 10.
+  const raus = () => {
     schicke({ t: "leave" });
     S.code = null; S.room = null; S.runde = null;
-    sessionStorage.removeItem(key);
+    sitzLoeschen();
     history.replaceState(null, "", location.pathname);
     zeige("home");
     schicke({ t: "browse" });
   };
+  $("leaveBtn").onclick = raus;
+  for (const b of document.querySelectorAll("[data-raus]")) b.onclick = raus;
   $("helpBtn").onclick = () => { $("help").hidden = false; };
   $("helpClose").onclick = () => { $("help").hidden = true; };
 
-  const gespeichert = JSON.parse(sessionStorage.getItem(key) ?? "null");
+  const gespeichert = sitzFrei();
   const hash = location.hash.replace("#", "").toUpperCase();
   // Der Schluessel heisst in allen dreiundzwanzig Spielen gleich - nur so
   // findet man seinen Namen beim naechsten Spiel wieder vor, ohne ihn neu zu
