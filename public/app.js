@@ -5,7 +5,7 @@ import { $, el, S, schicke, starteSchale, zeige } from "./schale.js";
 const HILFE = [
   "<b>Ein gemeinsames Brett</b>, jeder sieht es auf seinem eigenen Handy. Dran ist immer nur einer.",
   "<b>Zwei Karten aufdecken.</b> Passen sie zusammen, gehören sie dir und du bist noch mal dran.",
-  "<b>Passen sie nicht</b>, bleiben sie kurz offen liegen – damit alle sie sehen können – und werden wieder zugedeckt.",
+  "<b>Passen sie nicht</b>, bleiben sie kurz offen liegen – damit alle sie sehen können – und werden wieder zugedeckt. Wem das zu langsam ist: aufs Brett tippen, dann geht es sofort weiter.",
   "<b>Verdeckte Karten kennt auch dein Browser nicht.</b> Nachschauen im Quelltext bringt nichts.",
   "<b>Wer die meisten Paare hat, gewinnt.</b> Allein geht es auch: dann ist es ein Gedächtnistraining.",
 ];
@@ -47,8 +47,13 @@ function zeichneSpiel(m) {
   for (const k of m.brett) {
     const c = el("button", "pk" + (k.offen ? " auf" : "") + (k.weg ? " weg" : ""),
       k.zeichen ?? "");
-    c.disabled = m.amZug !== S.me || m.sperre || k.offen || k.weg;
-    c.onclick = () => schicke({ t: "auf", i: k.i });
+    // Liegt ein falsches Paar offen, wartet das ganze Brett auf den Zeitgeber.
+    // Ein Tipp irgendwo darauf bricht die Wartezeit ab – deshalb sind die
+    // Karten dann nicht gesperrt, sie decken nur nichts mehr auf.
+    c.disabled = m.sperre ? false : (m.amZug !== S.me || k.offen || k.weg);
+    c.onclick = m.sperre
+      ? () => schicke({ t: "weiter" })
+      : () => schicke({ t: "auf", i: k.i });
     if (k.weg && k.von) c.title = "gefunden von " + k.von;
     brett.append(c);
   }

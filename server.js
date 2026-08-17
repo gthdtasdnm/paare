@@ -19,6 +19,10 @@ const PUBLIC = new URL("./public/", import.meta.url);
 const MAX_PLAYERS = 6;
 const MIN_PLAYERS = 1;
 const ZU_MS = 1800;   // so lange bleibt ein falsches Paar offen liegen
+// ... es sei denn, jemand tippt. Dann geht es sofort weiter - aber nicht vor
+// dieser Frist, sonst reisst ein schneller Finger die zweite Karte weg, bevor
+// die anderen sie ueberhaupt gesehen haben.
+const ZU_MIN_MS = 450;
 
 // Bedenkzeit je Zug. Wer dran ist und nichts tut, haelt sonst die ganze Runde
 // an - und am Tisch merkt niemand, woran es liegt. Nach Ablauf wird eine
@@ -45,6 +49,9 @@ const {
   raumfelder: () => ({
     karten: [], offen: [], reihe: [], amZug: null, sperre: false, meldung: null,
     frist: 0, zugTimer: null,
+    // Das offen liegende falsche Paar: Zeitgeber, ab wann ein Tipp es
+    // vorzeitig zudecken darf, und wer danach dran ist.
+    zuTimer: null, zuAb: 0, zuNaechster: null,
   }),
   spielerfelder: () => ({ gefunden: 0 }),
 
@@ -83,6 +90,9 @@ function startGame(room) {
   );
   room.offen = [];
   room.sperre = false;
+  room.zuTimer = null;
+  room.zuAb = 0;
+  room.zuNaechster = null;
   room.meldung = null;
   room.reihe = shuffle(anwesende(room).map((p) => p.id));
   for (const p of room.players.values()) {
@@ -196,19 +206,34 @@ function aufdecken(room, player, i) {
     return;
   }
 
-  room.meldung = "Kein Paar.";
+  room.meldung = "Kein Paar – tippen geht schneller.";
+  room.zuAb = Date.now() + ZU_MIN_MS;
+  room.zuNaechster = naechster(room, player.id);
   pushRunde(room);
-  const id = setTimeout(() => {
-    room.timers.delete(id);
-    for (const x of room.offen) room.karten[x].offen = false;
-    room.offen = [];
-    room.sperre = false;
-    room.meldung = null;
-    room.amZug = naechster(room, player.id);
-    neueFrist(room);
-    pushRunde(room);
-  }, ZU_MS);
+  const id = setTimeout(() => zudecken(room, id), ZU_MS);
+  room.zuTimer = id;
   room.timers.add(id);
+}
+
+/**
+ * Das falsche Paar wieder zudecken und den Zug weiterreichen. Kommt aus dem
+ * Zeitgeber - oder frueher, wenn jemand tippt (`weiter`). Wer wartet, wartet
+ * ungern die vollen 1,8 s, wenn ohnehin alle die beiden Karten schon kennen.
+ */
+function zudecken(room, id = room.zuTimer) {
+  if (!room.sperre || id !== room.zuTimer) return;
+  clearTimeout(id);
+  room.timers.delete(id);
+  room.zuTimer = null;
+  room.zuAb = 0;
+  for (const x of room.offen) room.karten[x].offen = false;
+  room.offen = [];
+  room.sperre = false;
+  room.meldung = null;
+  room.amZug = room.zuNaechster ?? naechster(room, room.amZug);
+  room.zuNaechster = null;
+  neueFrist(room);
+  pushRunde(room);
 }
 
 function finishGame(room) {
@@ -242,6 +267,9 @@ function backToLobby(room) {
   room.offen = [];
   room.reihe = [];
   room.sperre = false;
+  room.zuTimer = null;
+  room.zuAb = 0;
+  room.zuNaechster = null;
   room.meldung = null;
   for (const p of room.players.values()) {
     p.ready = false;
@@ -347,6 +375,15 @@ function handle(ws, msg) {
       if (room.phase !== "playing" || room.sperre) break;
       if (room.amZug !== player.id) break;
       aufdecken(room, player, Number(msg.i));
+      break;
+    }
+
+    // Ein Tipp waehrend das falsche Paar offen liegt: sofort zudecken. Darf
+    // jeder, nicht nur wer dran ist - alle warten schliesslich mit.
+    case "weiter": {
+      if (room.phase !== "playing" || !room.sperre) break;
+      if (Date.now() < room.zuAb) break;
+      zudecken(room);
       break;
     }
 

@@ -143,6 +143,7 @@ function bekanntesPaar() {
 }
 
 let paare = 0, danebengegriffen = 0, sperreGeprueft = false, doppeltGeprueft = false;
+let weiterGeprueft = false;
 
 for (let zug = 0; zug < 60 && !A.final; zug++) {
   const d = amZug();
@@ -194,6 +195,17 @@ for (let zug = 0; zug < 60 && !A.final; zug++) {
       muss(!brett()[zu.i].offen, "Während der Sperre ließ sich eine Karte aufdecken");
       sperreGeprueft = true;
     }
+    // Ein Tipp bricht die Wartezeit ab (Bugreport 5). Kurz warten, damit die
+    // Mindestfrist von 450 ms um ist, dann muss es sofort weitergehen und
+    // nicht erst nach den vollen 1800 ms.
+    if (!weiterGeprueft) {
+      await warte(520);
+      const t0 = Date.now();
+      d.send({ t: "weiter" });
+      await bis(() => !A.runde.sperre || A.final, "der Tipp deckt das falsche Paar zu", 1000);
+      muss(Date.now() - t0 < 600, "Der Tipp hat die Wartezeit nicht abgekürzt");
+      weiterGeprueft = true;
+    }
     await bis(() => !A.runde.sperre || A.final, "die Karten drehen sich wieder um", 5000);
     if (A.final) break;
     muss(brett().filter((f) => f.offen).length === 0,
@@ -205,6 +217,7 @@ for (let zug = 0; zug < 60 && !A.final; zug++) {
 muss(A.final, "Das Brett wurde in 60 Zügen nicht leer");
 muss(paare === 8, `Es wurden ${paare} Paare gefunden, nicht acht`);
 muss(sperreGeprueft && doppeltGeprueft, "Sperre oder Doppelklick kamen nicht vor");
+muss(weiterGeprueft, "Der Abbruch der Wartezeit per Tipp kam nicht vor");
 console.log(`ok  Brett leergespielt: 8 Paare, ${danebengegriffen}× danebengegriffen`);
 console.log("ok  Paar behalten und noch einmal dran, Fehlgriff sperrt und gibt ab");
 
